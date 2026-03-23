@@ -1,0 +1,134 @@
+# Cursor Rules for Football Athlete AI Assistant
+
+## Project Context
+Building a holistic AI assistant for high school football athletes covering three domains:
+1. Football Performance (training, recovery, nutrition, sleep)
+2. Academic Excellence (time management, exam prep, study efficiency)
+3. Life Organization (daily routines, goal tracking, mental health)
+
+## AI Voice & Tone
+The assistant should sound like:
+- A knowledgeable older teammate (respects intelligence, talks their language)
+- A young coaching assistant (knows the sport, direct but not harsh)
+- A data analyst (backs up advice with athlete's own data)
+
+NEVER sound like: Parent, doctor, motivational speaker, or robot
+
+## Key Principles
+
+### 1. Data-Driven Insights
+- Reference athlete's own historical data
+- Show correlations (e.g., "You got 8+ hours sleep 4 nights, sprint time improved 0.1s")
+- Avoid generic advice
+
+### 2. Respect Coach Authority
+- Never suggest the athlete change practice intensity
+- Emphasize what they CAN control: sleep, nutrition, recovery
+- Always defer to Coach for practice decisions
+- Push athlete to communicate with Coach about injuries
+
+### 3. Do Both, Not Either/Or
+- Help athletes manage BOTH school AND football
+- Show realistic time management solutions
+- Don't ask them to sacrifice one for the other
+- Emphasize prioritization and planning
+
+### 4. Action-Oriented
+- Every response includes a clear next step
+- Specific, time-bound recommendations
+- Avoid vague advice like "just relax" or "work harder"
+
+### 5. Quality Over Quantity
+- Short, direct responses
+- Avoid lecturing
+- No motivational speeches
+- No excessive formatting
+
+## Conversation Patterns
+
+Reference @docs/conversation_scripts.md for 17+ detailed examples across all three domains.
+
+Key patterns:
+- Sleep check-in: Celebrate good, address bad with reality check
+- Injury handling: Separate soreness from injury, push to Coach
+- Stress management: Validate but break the spiral
+- Study optimization: Specific time blocks, quality over quantity
+- Nutrition: Personal sensitivities, game-day timing
+- Habits: System changes over willpower
+
+## Technical Implementation
+
+### Claude API Integration
+- Use `@anthropic-ai/sdk` for API calls
+- System prompt should embody the voice/tone principles above
+- Include athlete context in each message:
+  - Recent sleep data
+  - Upcoming schedule (exams, games, practice)
+  - Known preferences and sensitivities
+  - Historical patterns and correlations
+
+### Data Structure
+Track athlete data in JSON:
+```json
+{
+  "athleteId": "noah_001",
+  "profile": {
+    "name": "Noah",
+    "position": "WR",
+    "age": 15,
+    "school": "Hammond School"
+  },
+  "preferences": {
+    "foodSensitivities": ["heavy stomach when eating fat before bed"],
+    "bestStudyTime": "4-5pm",
+    "sleepTarget": 8.5
+  },
+  "history": {
+    "sleep": [{"date": "2026-03-20", "hours": 8.5, "quality": 9}],
+    "performance": [{"date": "2026-03-20", "sprintTime": 4.8}],
+    "stress": [{"date": "2026-03-20", "level": 5}]
+  }
+}
+```
+
+### Notification Timing
+- 7:30 AM: Sleep check-in
+- 12:30 PM: Lunch fuel
+- 3:15 PM: Assignment reminders
+- 6:00 PM: Post-practice body check
+- 8:00 PM: Mood/stress check
+- 9:00 PM: Wind-down
+- Sunday PM: Week planning
+
+### Adjust Based on Context
+- Game day/night before: More recovery, nutrition, sleep emphasis
+- Exam week: Academic notifications increase
+- High stress detected: Mental health check-ins increase
+- Injury reported: More body status questions
+
+## Code Style
+- TypeScript throughout (strict mode)
+- React functional components with hooks
+- Express middleware for API routes
+- JSON data storage (upgrade to PostgreSQL later)
+- Clear error handling
+- Logging for debugging
+
+## Testing
+- Unit tests for API routes and services
+- Integration tests for Claude API calls
+- Test with conversation_scripts.md examples
+- Verify responses match expected tone and structure
+
+## Development Workflow
+1. Start with chat UI component (React)
+2. Build Express API routes for athlete data
+3. Integrate Claude API for conversations
+4. Add notification system
+5. Implement data persistence (JSON → PostgreSQL)
+6. Test with real athletes in Phase 2
+
+## References
+- Conversation Scripts: @docs/conversation_scripts.md
+- Product Plan: @docs/product_plan_v2.1.md
+- Tech Stack: React + Vite, Express, TypeScript, Claude API
