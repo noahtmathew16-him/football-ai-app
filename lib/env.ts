@@ -17,6 +17,14 @@ export function getAnthropicModel(): string {
   return 'claude-sonnet-4-6'
 }
 
+/**
+ * When false (e.g. Vercel serverless), skip writing `data/conversations` and
+ * `data/uploads` — filesystem is ephemeral. Claude still receives file content in-memory.
+ */
+export function persistDataToDisk(): boolean {
+  return process.env['VERCEL'] !== '1'
+}
+
 /** Safe to log — never includes the full API key. */
 export function getAnthropicKeyDiagnostics(): {
   envVarPresent: boolean

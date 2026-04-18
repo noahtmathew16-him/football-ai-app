@@ -1,5 +1,6 @@
 import fs from 'fs/promises'
 import path from 'path'
+import { persistDataToDisk } from './env.js'
 import { conversationsDir, uploadsDir } from './paths.js'
 import type {
   ConversationRecord,
@@ -17,6 +18,9 @@ async function ensureDirs(): Promise<void> {
 }
 
 export async function persistConversation(record: ConversationRecord): Promise<void> {
+  if (!persistDataToDisk()) {
+    return
+  }
   try {
     await ensureDirs()
     const file = path.join(conversationsDir(), `${record.id}.json`)
@@ -29,6 +33,9 @@ export async function persistConversation(record: ConversationRecord): Promise<v
 export async function loadConversation(
   id: string,
 ): Promise<ConversationRecord | null> {
+  if (!persistDataToDisk()) {
+    return null
+  }
   if (!safeId(id)) return null
   try {
     const file = path.join(conversationsDir(), `${id}.json`)
@@ -58,9 +65,21 @@ export async function saveUploadBuffer(opts: {
   buffer: Buffer
   topic: TopicDomain
 }): Promise<StoredAttachment> {
-  await ensureDirs()
   const safeName = path.basename(opts.fileName).replace(/[^a-zA-Z0-9._-]/g, '_')
   const id = `f_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+
+  if (!persistDataToDisk()) {
+    return {
+      id,
+      fileName: safeName,
+      mimeType: opts.mimeType,
+      storedPath: '(ephemeral-not-persisted)',
+      uploadedAt: new Date().toISOString(),
+      topicAtUpload: opts.topic,
+    }
+  }
+
+  await ensureDirs()
   const dir = path.join(uploadsDir(), opts.conversationId)
   await fs.mkdir(dir, { recursive: true })
   const storedPath = path.join(dir, `${id}_${safeName}`)
@@ -83,6 +102,9 @@ export async function recordFeedback(opts: {
 }): Promise<boolean> {
   if (!safeId(opts.conversationId)) return false
   if (opts.rating < 1 || opts.rating > 10) return false
+  if (!persistDataToDisk()) {
+    return true
+  }
   const rec = await loadConversation(opts.conversationId)
   if (!rec) return false
   rec.feedbackByMessageId[opts.messageId] = {

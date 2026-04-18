@@ -2,6 +2,7 @@ import type { ImageBlockParam, TextBlockParam } from '@anthropic-ai/sdk/resource
 
 type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
 import { chatWithClaude, type ChatMessage } from './client.js'
+import { persistDataToDisk } from './env.js'
 import {
   inferTopicFromText,
 } from './inferTopic.js'
@@ -78,6 +79,12 @@ function isImageMime(m: string): boolean {
     m === 'image/gif' ||
     m === 'image/webp'
   )
+}
+
+function savedCopy(): string {
+  return persistDataToDisk()
+    ? 'file was saved for your records'
+    : 'file was processed in memory only (not stored on server)'
 }
 
 export async function processChatRequest(
@@ -170,7 +177,9 @@ export async function processChatRequest(
           data: b.buffer.toString('base64'),
         },
       })
-      att.analysisSummary = 'Image sent to Claude vision (full file on disk).'
+      att.analysisSummary = persistDataToDisk()
+        ? 'Image sent to Claude vision (full file on disk).'
+        : 'Image sent to Claude vision (not written to disk on this host).'
     } else if (b.mimeType === 'application/pdf') {
       let extracted = ''
       let pdfExtractFailed = false
@@ -179,7 +188,7 @@ export async function processChatRequest(
       } catch (e) {
         pdfExtractFailed = true
         console.error('[processChatRequest] PDF extract failed', e)
-        extracted = '(Could not extract PDF text; file was saved for your records.)'
+        extracted = `(Could not extract PDF text; ${savedCopy()}.)`
       }
       const label = `Content from uploaded file "${b.fileName}" (PDF):\n`
       parts.push({
@@ -190,11 +199,15 @@ export async function processChatRequest(
             : `${label}${pdfExtractFailed ? extracted : '(No text layer found in this PDF.)'}`,
       })
       if (pdfExtractFailed) {
-        att.analysisSummary = 'PDF: extraction failed; file kept on disk.'
+        att.analysisSummary = persistDataToDisk()
+          ? 'PDF: extraction failed; file kept on disk.'
+          : 'PDF: extraction failed; not persisted on server.'
       } else if (extracted.length > 0) {
         att.analysisSummary = `PDF: ${extracted.length} characters extracted for the model. Preview: ${extracted.slice(0, 500)}${extracted.length > 500 ? '…' : ''}`
       } else {
-        att.analysisSummary = 'PDF: no extractable text layer; file kept on disk.'
+        att.analysisSummary = persistDataToDisk()
+          ? 'PDF: no extractable text layer; file kept on disk.'
+          : 'PDF: no extractable text layer; not persisted on server.'
       }
     } else if (b.mimeType === 'text/plain' || b.mimeType === 'text/markdown') {
       const txt = b.buffer.toString('utf8')
@@ -206,7 +219,7 @@ export async function processChatRequest(
     } else {
       parts.push({
         type: 'text',
-        text: `An uploaded file "${b.fileName}" (${b.mimeType}) was saved but could not be sent to the model. Supported: images (jpeg/png/gif/webp), PDF, plain text.`,
+        text: `An uploaded file "${b.fileName}" (${b.mimeType}) was received but could not be sent to the model. Supported: images (jpeg/png/gif/webp), PDF, plain text.`,
       })
       att.analysisSummary = `Stored (${b.mimeType}); not sent to the model.`
     }
