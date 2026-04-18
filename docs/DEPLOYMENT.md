@@ -1,99 +1,70 @@
 # Deploying Football Athlete AI
 
-Deploy to **Railway** (recommended) or **Vercel**. Both have free tiers.
+**Recommended: [Vercel](https://vercel.com)** — works well with this repo’s Vite frontend + `/api/chat` serverless function.
+
+> **Note:** On Vercel, **Express is not used in production.** The browser loads the static React app; chat requests go to a **serverless function** at `api/chat.ts`. Express (`src/server/`) is for **local development** (`npm run dev`).
 
 ---
 
-## Option 1: Railway (Recommended)
+## Deploy to Vercel
 
-Railway runs your full-stack app as a single service. Easiest setup.
+### 1. Prerequisites
 
-### Steps
+- Code pushed to GitHub (e.g. `noahtmathew16-him/football-ai-app`)
+- Anthropic API key with credits
 
-1. **Push your code to GitHub** (if not already)
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit"
-   git remote add origin https://github.com/YOUR_USERNAME/football-ai-app.git
-   git push -u origin main
-   ```
+### 2. Import the project
 
-2. **Sign up at [railway.app](https://railway.app)** (GitHub login)
+1. Go to [vercel.com/new](https://vercel.com/new)
+2. Sign in with **GitHub**
+3. **Import** `football-ai-app` (or **Add** → **Project** → select the repo)
 
-3. **Create a new project**
-   - Click **New Project**
-   - Choose **Deploy from GitHub repo**
-   - Select `football-ai-app`
+### 3. Build settings (usually auto-detected)
 
-4. **Add environment variable**
-   - Open your project → **Variables**
-   - Add: `ANTHROPIC_API_KEY` = your API key
-   - Add: `NODE_ENV` = `production` (Railway may set this automatically)
+Confirm these match `vercel.json`:
 
-5. **Configure build** (Railway usually auto-detects)
-   - **Build Command:** `npm run build`
-   - **Start Command:** `npm run start`
-   - **Root Directory:** `/` (default)
+| Setting | Value |
+|---------|--------|
+| **Framework Preset** | Vite |
+| **Build Command** | `npm run build:client` |
+| **Output Directory** | `dist/client` |
+| **Install Command** | `npm install` (default) |
 
-6. **Deploy**
-   - Railway deploys automatically on push
-   - Get your URL from the **Settings** → **Networking** → **Generate Domain**
+### 4. Environment variables
 
-### Free Tier
+In **Settings** → **Environment Variables** (or during import):
 
-- $5 free credit/month
-- Sleeps after inactivity (cold starts)
-- Custom domain supported
+| Name | Value |
+|------|--------|
+| `ANTHROPIC_API_KEY` | Your Anthropic secret key |
 
----
+Apply to **Production**, **Preview**, and **Development** as needed.
 
-## Option 2: Vercel
+### 5. Deploy
 
-Vercel hosts the frontend and API as serverless functions.
+Click **Deploy**. When it finishes, open the production URL and test the chat.
 
-### Steps
+### 6. After deploy
 
-1. **Install Vercel CLI** (optional)
-   ```bash
-   npm i -g vercel
-   ```
-
-2. **Push code to GitHub** (same as Railway)
-
-3. **Sign up at [vercel.com](https://vercel.com)** (GitHub login)
-
-4. **Import project**
-   - Click **Add New** → **Project**
-   - Import `football-ai-app` from GitHub
-
-5. **Configure**
-   - **Framework Preset:** Vite (auto-detected)
-   - **Build Command:** `npm run build:client`
-   - **Output Directory:** `dist/client`
-   - **Install Command:** `npm install`
-
-6. **Add environment variable**
-   - Project → **Settings** → **Environment Variables**
-   - Add: `ANTHROPIC_API_KEY` = your API key
-
-7. **Deploy**
-   - Click **Deploy**
-   - Vercel will build and give you a URL
-
-### Notes
-
-- API route `/api/chat` is deployed as a serverless function from `api/chat.ts`
-- Free tier: 100GB bandwidth, serverless function invocations
-- Edge network, fast global deployment
+- **Functions** tab — logs for `/api/chat` if something fails
+- **Deployments** — rebuild on every push to `main` (default)
 
 ---
 
-## After Deployment
+## How it works on Vercel
 
-1. **Test the app** — Open your deployment URL and try the chat
-2. **Check logs** — Railway/Vercel dashboards show errors if something fails
-3. **Add credits** — Ensure your Anthropic account has credits for API usage
+| Part | What runs |
+|------|-----------|
+| **Frontend** | Static files from `npm run build:client` → `dist/client` |
+| **Chat API** | Serverless function: `api/chat.ts` → same-origin `POST /api/chat` |
+
+The React app calls `fetch('/api/chat', …)` — same origin on your `*.vercel.app` domain, no CORS setup needed.
+
+---
+
+## Railway (optional)
+
+If you use Railway, it runs **one Node process** (`npm run start`) that serves both the SPA and Express API. If you see **Railpack / build plan** errors, check Railway’s docs or use Vercel for this repo instead.
 
 ---
 
@@ -101,7 +72,7 @@ Vercel hosts the frontend and API as serverless functions.
 
 | Issue | Fix |
 |-------|-----|
-| "AI service is not configured" | Add `ANTHROPIC_API_KEY` in platform env vars |
-| 404 on `/api/chat` | Verify API route deployed; check function logs |
-| Build fails | Run `npm run build` locally first; fix any errors |
-| Blank page | Check browser console; verify `outputDirectory` in vercel.json |
+| "AI service is not configured" | Set `ANTHROPIC_API_KEY` in Vercel env vars; redeploy |
+| 404 on `POST /api/chat` | Confirm `api/chat.ts` exists at repo root; check **Functions** in Vercel |
+| Build fails | Run `npm run build:client` locally |
+| Chat errors from Anthropic | Check Anthropic billing / credits |
