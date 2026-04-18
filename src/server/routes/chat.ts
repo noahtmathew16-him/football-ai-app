@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express'
 import { chatWithClaude, type ChatMessage } from '../../ai/client.js'
 import { chatErrorHttpPayload } from '../../ai/extractAnthropicError.js'
 import { normalizeAthleteId, normalizeHistory } from '../../ai/chatRequest.js'
+import { getAnthropicApiKey } from '../../ai/env.js'
 
 const router = Router()
 
@@ -32,9 +33,12 @@ router.post('/', async (req: Request, res: Response) => {
       return
     }
 
-    if (!process.env.ANTHROPIC_API_KEY) {
-      console.error('ANTHROPIC_API_KEY is not set')
-      res.status(500).json({ error: 'AI service is not configured' })
+    if (!getAnthropicApiKey()) {
+      console.error('ANTHROPIC_API_KEY is not set or empty')
+      res.status(503).json({
+        error: 'AI service is not configured',
+        hint: 'Set ANTHROPIC_API_KEY in your environment (.env locally, Vercel env on deploy).',
+      })
       return
     }
 

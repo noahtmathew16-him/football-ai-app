@@ -1,9 +1,16 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { getAnthropicApiKey, getAnthropicModel } from './env.js'
 import { FOOTBALL_ATHLETE_SYSTEM_PROMPT } from './prompts/system.js'
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY?.trim(),
-})
+function createClient(): Anthropic {
+  const apiKey = getAnthropicApiKey()
+  if (!apiKey) {
+    throw new Error(
+      'ANTHROPIC_API_KEY is missing. Add it in Vercel → Settings → Environment Variables (Production), then redeploy.',
+    )
+  }
+  return new Anthropic({ apiKey })
+}
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
@@ -43,10 +50,9 @@ export async function chatWithClaude(
     throw new Error('Invalid conversation: expected a user message to send.')
   }
 
-  const model =
-    process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-6'
+  const model = getAnthropicModel()
 
-  const response = await client.messages.create({
+  const response = await createClient().messages.create({
     model,
     max_tokens: 1024,
     system,

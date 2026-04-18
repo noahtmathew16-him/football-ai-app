@@ -76,6 +76,7 @@ export function ChatInterface() {
       let data: {
         response?: string
         error?: string
+        hint?: string
         anthropicMessage?: string
         requestId?: string
       }
@@ -89,7 +90,10 @@ export function ChatInterface() {
 
       if (!res.ok) {
         const detail =
-          data.anthropicMessage || data.error || 'Failed to get response'
+          data.anthropicMessage ||
+          data.hint ||
+          data.error ||
+          'Failed to get response'
         const reqId = data.requestId ? ` (request ${data.requestId})` : ''
         throw new Error(`${detail}${reqId}`)
       }

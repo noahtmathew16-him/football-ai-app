@@ -36,13 +36,20 @@ In **Settings** → **Environment Variables** (or during import):
 
 | Name | Value |
 |------|--------|
-| `ANTHROPIC_API_KEY` | Your Anthropic secret key |
+| `ANTHROPIC_API_KEY` | Your Anthropic secret key (name must match exactly) |
 
-Apply to **Production**, **Preview**, and **Development** as needed.
+- Enable **Production** at minimum (Preview optional for PR previews).
+- **After adding or changing env vars, redeploy** (Deployments → … → Redeploy, or push a commit). New variables are not always picked up until a new deployment.
 
 ### 5. Deploy
 
 Click **Deploy**. When it finishes, open the production URL and test the chat.
+
+**Verify the key is visible to the serverless function:** open  
+`https://YOUR_PROJECT.vercel.app/api/chat`  
+in a browser (GET). You should see JSON like  
+`{ "ok": true, "anthropicConfigured": true }`.  
+If `anthropicConfigured` is `false`, the key is missing for that deployment or empty—fix env and redeploy.
 
 ### 6. After deploy
 

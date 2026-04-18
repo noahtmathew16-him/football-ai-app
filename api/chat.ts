@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { chatWithClaude, type ChatMessage } from '../src/ai/client'
 import { chatErrorHttpPayload } from '../src/ai/extractAnthropicError'
 import { normalizeAthleteId, normalizeHistory } from '../src/ai/chatRequest'
+import { getAnthropicApiKey } from '../src/ai/env'
 
 interface ChatRequestBody {
   message: string
@@ -23,6 +24,20 @@ function parseJsonBody(req: VercelRequest): unknown {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method === 'GET') {
+    const configured = Boolean(getAnthropicApiKey())
+    res.status(200).json({
+      ok: true,
+      anthropicConfigured: configured,
+      ...(configured
+        ? {}
+        : {
+            hint: 'Set ANTHROPIC_API_KEY in Vercel → Settings → Environment Variables for Production, then Redeploy.',
+          }),
+    })
+    return
+  }
+
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return
@@ -48,8 +63,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return
     }
 
-    if (!process.env.ANTHROPIC_API_KEY) {
-      res.status(500).json({ error: 'AI service is not configured' })
+    if (!getAnthropicApiKey()) {
+      console.error(
+        '[api/chat] ANTHROPIC_API_KEY is not set or is empty after trim',
+      )
+      res.status(503).json({
+        error: 'AI service is not configured',
+        hint: 'Add ANTHROPIC_API_KEY in Vercel → Environment Variables (Production), save, then Redeploy.',
+      })
       return
     }
 
