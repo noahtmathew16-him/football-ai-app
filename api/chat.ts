@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { chatWithClaude, type ChatMessage } from '../src/ai/client'
-import { chatErrorHttpPayload } from '../src/ai/extractAnthropicError'
-import { normalizeAthleteId, normalizeHistory } from '../src/ai/chatRequest'
-import { getAnthropicApiKey, getAnthropicKeyDiagnostics } from '../src/ai/env'
+import { chatWithClaude, type ChatMessage } from '../lib/client.js'
+import { chatErrorHttpPayload } from '../lib/extractAnthropicError.js'
+import { normalizeAthleteId, normalizeHistory } from '../lib/chatRequest.js'
+import { getAnthropicApiKey, getAnthropicKeyDiagnostics } from '../lib/env.js'
 
 interface ChatRequestBody {
   message: string

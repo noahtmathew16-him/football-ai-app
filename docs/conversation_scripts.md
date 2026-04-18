@@ -457,7 +457,7 @@ Send those emails today. The longer you wait, the harder it gets.
    Use these scripts as context when prompting Cursor to implement or refine the Football Athlete AI. For example: *“When the user asks about recovery, use the structure from Script 1 in conversation_scripts.md.”*
 
 2. **Prompt templates**  
-   Turn scripts into system or user prompts. Extract the response patterns and adapt them for your AI client (e.g., Claude) in `src/ai/prompts/`.
+   Turn scripts into system or user prompts. Extract the response patterns and adapt them for your AI client (e.g., Claude) in `lib/prompts/`.
 
 3. **Testing**  
    Use the User lines as test inputs and the AI lines as expected-behavior references for automated or manual testing.

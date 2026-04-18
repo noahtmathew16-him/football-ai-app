@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express'
-import { chatWithClaude, type ChatMessage } from '../../ai/client.js'
-import { chatErrorHttpPayload } from '../../ai/extractAnthropicError.js'
-import { normalizeAthleteId, normalizeHistory } from '../../ai/chatRequest.js'
-import { getAnthropicApiKey } from '../../ai/env.js'
+import { chatWithClaude, type ChatMessage } from '../../../lib/client.js'
+import { chatErrorHttpPayload } from '../../../lib/extractAnthropicError.js'
+import { normalizeAthleteId, normalizeHistory } from '../../../lib/chatRequest.js'
+import { getAnthropicApiKey } from '../../../lib/env.js'
 
 const router = Router()
 

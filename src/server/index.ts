@@ -18,7 +18,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/chat', chatRouter)
 
 if (isProduction) {
-  const clientPath = path.join(__dirname, '../client')
+  const clientPath = path.join(__dirname, '../../client')
   app.use(express.static(clientPath))
   app.get('*', (_req, res) => {
     res.sendFile(path.join(clientPath, 'index.html'))

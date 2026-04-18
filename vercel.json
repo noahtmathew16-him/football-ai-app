@@ -1,5 +1,11 @@
 {
   "buildCommand": "npm run build:client",
   "outputDirectory": "dist/client",
-  "framework": "vite"
+  "framework": "vite",
+  "functions": {
+    "api/chat.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  }
 }

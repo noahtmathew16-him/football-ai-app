@@ -6,8 +6,8 @@
     "noEmit": false,
     "allowImportingTsExtensions": false,
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": ".",
     "jsx": "preserve"
   },
-  "include": ["src/server/**/*", "src/shared/**/*", "src/ai/**/*"]
+  "include": ["lib/**/*.ts", "src/server/**/*.ts", "src/shared/**/*.ts"]
 }
