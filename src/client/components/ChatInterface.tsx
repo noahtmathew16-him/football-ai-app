@@ -3,6 +3,7 @@ import {
   useRef,
   useEffect,
   useCallback,
+  type ChangeEvent,
   type KeyboardEvent,
 } from 'react'
 import ReactMarkdown from 'react-markdown'
@@ -97,11 +98,17 @@ export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES)
   const [input, setInput] = useState('')
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  /** Synced on every pendingFiles change; updated synchronously in file handlers so Send never races state. */
+  const pendingFilesRef = useRef<File[]>([])
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
   const [copyFlashId, setCopyFlashId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    pendingFilesRef.current = pendingFiles
+  }, [pendingFiles])
 
   const scrollToBottom = useCallback(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -138,10 +145,11 @@ export function ChatInterface() {
 
   const handleSend = async () => {
     const trimmed = input.trim()
-    if ((!trimmed && pendingFiles.length === 0) || isSending) return
+    const filesSnapshot = [...pendingFilesRef.current]
+    if ((!trimmed && filesSnapshot.length === 0) || isSending) return
 
     const tempUserId = newMessageId()
-    const names = pendingFiles.map((f) => f.name)
+    const names = filesSnapshot.map((f) => f.name)
     const displayLines = [trimmed, names.length ? `[Files: ${names.join(', ')}]` : '']
       .filter(Boolean)
       .join('\n\n')
@@ -155,6 +163,7 @@ export function ChatInterface() {
     }
     setMessages((prev) => [...prev, athleteMessage])
     setInput('')
+    pendingFilesRef.current = []
     setPendingFiles([])
     setIsSending(true)
 
@@ -166,7 +175,7 @@ export function ChatInterface() {
       []
     try {
       const parts = await Promise.all(
-        pendingFiles.map(async (f) => ({
+        filesSnapshot.map(async (f) => ({
           fileName: f.name,
           mimeType: f.type || 'application/octet-stream',
           base64: await readFileAsBase64(f),
@@ -278,11 +287,20 @@ export function ChatInterface() {
     }
   }
 
-  const onPickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onPickFiles = (e: ChangeEvent<HTMLInputElement>) => {
     const list = e.target.files
     if (!list?.length) return
-    setPendingFiles((prev) => [...prev, ...Array.from(list)])
+    const added = Array.from(list)
+    const next = [...pendingFilesRef.current, ...added]
+    pendingFilesRef.current = next
+    setPendingFiles(next)
     e.target.value = ''
+  }
+
+  const removePendingFile = (file: File) => {
+    const next = pendingFilesRef.current.filter((x) => x !== file)
+    pendingFilesRef.current = next
+    setPendingFiles(next)
   }
 
   const showFeedback = (msg: Message) =>
@@ -379,28 +397,6 @@ export function ChatInterface() {
 
       <div className="flex-shrink-0 border-t border-neutral-200 bg-white">
         <div className="max-w-3xl mx-auto p-3 sm:p-4">
-          {pendingFiles.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-2">
-              {pendingFiles.map((f) => (
-                <span
-                  key={`${f.name}-${f.size}`}
-                  className="inline-flex items-center gap-1 text-xs bg-neutral-100 text-neutral-700 px-2 py-1 rounded-lg border border-neutral-200"
-                >
-                  {f.name}
-                  <button
-                    type="button"
-                    className="text-neutral-500 hover:text-red-600"
-                    onClick={() =>
-                      setPendingFiles((prev) => prev.filter((x) => x !== f))
-                    }
-                    aria-label={`Remove ${f.name}`}
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
           <div className="flex gap-2 items-end">
             <input
               ref={fileInputRef}
@@ -420,18 +416,51 @@ export function ChatInterface() {
             >
               <span className="text-lg leading-none">+</span>
             </button>
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Message… (Shift+Enter for new line)"
-              disabled={isSending}
-              rows={1}
-              className="flex-1 min-w-0 min-h-[44px] max-h-40 px-4 py-3 rounded-xl border border-neutral-300 bg-white text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 disabled:opacity-60 resize-y text-[15px]"
-            />
+            <div className="flex-1 min-w-0 flex flex-col gap-2 rounded-xl border border-neutral-300 bg-white focus-within:ring-2 focus-within:ring-emerald-500/40 focus-within:border-emerald-500">
+              {pendingFiles.length > 0 && (
+                <div
+                  className="flex flex-wrap gap-2 px-3 pt-3 pb-0"
+                  aria-label="Attachments ready to send"
+                >
+                  {pendingFiles.map((f, i) => (
+                    <span
+                      key={`${f.name}-${f.size}-${i}`}
+                      className="inline-flex items-center gap-1 text-xs bg-neutral-100 text-neutral-800 px-2 py-1 rounded-lg border border-neutral-200 max-w-full"
+                    >
+                      <span className="truncate" title={f.name}>
+                        {f.name}
+                      </span>
+                      <button
+                        type="button"
+                        className="flex-shrink-0 text-neutral-500 hover:text-red-600"
+                        onClick={() => removePendingFile(f)}
+                        aria-label={`Remove ${f.name}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  pendingFiles.length
+                    ? 'Add a message (optional)…'
+                    : 'Message… (Shift+Enter for new line)'
+                }
+                disabled={isSending}
+                rows={1}
+                className="w-full min-h-[44px] max-h-40 px-4 py-3 rounded-xl border-0 bg-transparent text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-0 disabled:opacity-60 resize-y text-[15px]"
+              />
+            </div>
             <button
               onClick={() => void handleSend()}
-              disabled={(!input.trim() && pendingFiles.length === 0) || isSending}
+              disabled={
+                (!input.trim() && pendingFiles.length === 0) || isSending
+              }
               className="flex-shrink-0 min-w-[5rem] h-11 px-4 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSending ? (

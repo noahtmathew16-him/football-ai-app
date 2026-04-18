@@ -22,13 +22,24 @@ export function normalizeFiles(raw: unknown): NormalizedFilePart[] {
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue
     const r = item as Record<string, unknown>
-    const fileName =
-      typeof r.fileName === 'string' ? pathBasenameSafe(r.fileName) : ''
+    const rawName =
+      typeof r.fileName === 'string'
+        ? r.fileName
+        : typeof r.name === 'string'
+          ? r.name
+          : ''
+    const fileName = rawName ? pathBasenameSafe(rawName) : ''
     const mimeType =
       typeof r.mimeType === 'string' && r.mimeType.trim().length > 0
         ? r.mimeType.trim()
         : 'application/octet-stream'
-    const base64 = typeof r.base64 === 'string' ? r.base64.trim() : ''
+    const base64Raw =
+      typeof r.base64 === 'string'
+        ? r.base64
+        : typeof r.data === 'string'
+          ? r.data
+          : ''
+    const base64 = base64Raw.trim()
     if (!fileName || !base64) continue
     out.push({ fileName, mimeType, base64 })
   }
