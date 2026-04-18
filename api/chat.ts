@@ -7,6 +7,19 @@ interface ChatRequestBody {
   history?: Array<{ role: 'athlete' | 'ai'; content: string }>
 }
 
+function parseJsonBody(req: VercelRequest): unknown {
+  const raw = req.body
+  if (raw == null) return {}
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw) as unknown
+    } catch {
+      return {}
+    }
+  }
+  return raw
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
@@ -14,7 +27,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { message, athleteId, history = [] } = (req.body || {}) as ChatRequestBody
+    const { message, athleteId, history = [] } =
+      parseJsonBody(req) as ChatRequestBody
 
     if (!message || typeof message !== 'string') {
       res.status(400).json({ error: 'Missing or invalid message' })
