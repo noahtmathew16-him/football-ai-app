@@ -8,6 +8,11 @@ import {
 import { processChatRequest } from '../lib/processChatRequest.js'
 import { chatErrorHttpPayload } from '../lib/extractAnthropicError.js'
 import { getAnthropicApiKey, getAnthropicKeyDiagnostics } from '../lib/env.js'
+import { validateChatPayload } from '../lib/inputValidation.js'
+import {
+  applyVercelRateLimitAndAuth,
+  applyVercelSecurityPreflight,
+} from '../lib/vercelGuards.js'
 
 interface ChatRequestBody {
   message?: string
@@ -47,6 +52,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     `req-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 
   try {
+    if (applyVercelSecurityPreflight(req, res)) {
+      return
+    }
+
+    if (applyVercelRateLimitAndAuth(req, res, 'chat') === 'responded') {
+      return
+    }
+
     if (req.method === 'GET') {
       const keyDiag = getAnthropicKeyDiagnostics()
       const configured = Boolean(getAnthropicApiKey())
@@ -58,7 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ...(configured
           ? {}
           : {
-              hint: 'Set ANTHROPIC_API_KEY in Vercel → Settings → Environment Variables for Production, then Redeploy.',
+              hint: 'Set ANTHROPIC_API_KEY in Vercel → Settings → Environment Variables (Production), then Redeploy.',
             }),
       })
       return
@@ -75,6 +88,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
 
     const body = parseJsonBody(req) as ChatRequestBody
+    const validation = validateChatPayload(body)
+    if (validation) {
+      res.status(400).json({ error: validation })
+      return
+    }
+
     const message =
       typeof body.message === 'string' ? body.message.trim() : ''
     const athleteId = normalizeAthleteId(body.athleteId)

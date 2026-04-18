@@ -7,7 +7,8 @@ import {
 } from '../../../lib/chatRequest.js'
 import { processChatRequest } from '../../../lib/processChatRequest.js'
 import { chatErrorHttpPayload } from '../../../lib/extractAnthropicError.js'
-import { getAnthropicApiKey } from '../../../lib/env.js'
+import { getAnthropicApiKey, getAnthropicKeyDiagnostics } from '../../../lib/env.js'
+import { validateChatPayload } from '../../../lib/inputValidation.js'
 
 const router = Router()
 
@@ -19,9 +20,30 @@ interface ChatRequestBody {
   files?: unknown
 }
 
+router.get('/', (_req: Request, res: Response) => {
+  const keyDiag = getAnthropicKeyDiagnostics()
+  const configured = Boolean(getAnthropicApiKey())
+  res.status(200).json({
+    ok: true,
+    anthropicConfigured: configured,
+    keyDiagnostics: keyDiag,
+    ...(configured
+      ? {}
+      : {
+          hint: 'Set ANTHROPIC_API_KEY in your environment (.env locally, Vercel env on deploy).',
+        }),
+  })
+})
+
 router.post('/', async (req: Request, res: Response) => {
   try {
     const body = req.body as ChatRequestBody
+    const validation = validateChatPayload(body)
+    if (validation) {
+      res.status(400).json({ error: validation })
+      return
+    }
+
     const message =
       typeof body.message === 'string' ? body.message.trim() : ''
     const athleteId = normalizeAthleteId(body.athleteId)

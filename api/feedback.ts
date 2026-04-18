@@ -1,6 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { normalizeConversationId } from '../lib/chatRequest.js'
+import { validateFeedbackFields } from '../lib/inputValidation.js'
 import { recordFeedback } from '../lib/conversationStore.js'
+import {
+  applyVercelRateLimitAndAuth,
+  applyVercelSecurityPreflight,
+} from '../lib/vercelGuards.js'
 
 interface FeedbackBody {
   conversationId?: string
@@ -22,6 +27,14 @@ function parseJsonBody(req: VercelRequest): unknown {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (applyVercelSecurityPreflight(req, res)) {
+    return
+  }
+
+  if (applyVercelRateLimitAndAuth(req, res, 'feedback') === 'responded') {
+    return
+  }
+
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return
@@ -42,6 +55,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(400).json({
       error: 'Missing conversationId or messageId',
     })
+    return
+  }
+
+  const idErr = validateFeedbackFields(messageId)
+  if (idErr) {
+    res.status(400).json({ error: idErr })
     return
   }
 

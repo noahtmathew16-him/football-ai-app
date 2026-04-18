@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { normalizeConversationId } from '../../../lib/chatRequest.js'
+import { validateFeedbackFields } from '../../../lib/inputValidation.js'
 import { recordFeedback } from '../../../lib/conversationStore.js'
 
 const router = Router()
@@ -26,6 +27,12 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(400).json({
       error: 'Missing conversationId or messageId',
     })
+    return
+  }
+
+  const idErr = validateFeedbackFields(messageId)
+  if (idErr) {
+    res.status(400).json({ error: idErr })
     return
   }
 

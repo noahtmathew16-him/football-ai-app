@@ -8,6 +8,8 @@ import {
 } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { MAX_MESSAGE_CHARS } from '../../../lib/inputValidation'
+import { apiFetch } from '../api/backend'
 
 export type MessageRole = 'athlete' | 'ai'
 
@@ -120,7 +122,7 @@ export function ChatInterface() {
 
   const submitFeedback = async (messageId: string, rating: number) => {
     if (!conversationId) return
-    const res = await fetch('/api/feedback', {
+    const res = await apiFetch('/api/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conversationId, messageId, rating }),
@@ -205,7 +207,7 @@ export function ChatInterface() {
     }
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await apiFetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -446,6 +448,7 @@ export function ChatInterface() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
+                maxLength={MAX_MESSAGE_CHARS}
                 placeholder={
                   pendingFiles.length
                     ? 'Add a message (optional)…'
