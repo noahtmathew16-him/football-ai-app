@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { chatWithClaude, type ChatMessage } from '../../ai/client.js'
+import { chatErrorHttpPayload } from '../../ai/extractAnthropicError.js'
+import { normalizeAthleteId, normalizeHistory } from '../../ai/chatRequest.js'
 
 const router = Router()
 
@@ -11,15 +13,22 @@ interface ChatRequestBody {
 
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { message, athleteId, history = [] } = req.body as ChatRequestBody
+    const body = req.body as ChatRequestBody
+    const message =
+      typeof body.message === 'string' ? body.message.trim() : ''
+    const athleteId = normalizeAthleteId(body.athleteId)
+    const history = normalizeHistory(body.history)
 
-    if (!message || typeof message !== 'string') {
+    if (!message) {
       res.status(400).json({ error: 'Missing or invalid message' })
       return
     }
 
-    if (!athleteId || typeof athleteId !== 'string') {
-      res.status(400).json({ error: 'Missing or invalid athleteId' })
+    if (!athleteId) {
+      res.status(400).json({
+        error: 'Missing or invalid athleteId',
+        hint: 'Send a non-empty string (e.g. "default").',
+      })
       return
     }
 
@@ -42,10 +51,8 @@ router.post('/', async (req: Request, res: Response) => {
 
     res.json({ response })
   } catch (err) {
-    console.error('Chat API error:', err)
-    res.status(500).json({
-      error: err instanceof Error ? err.message : 'Failed to get AI response',
-    })
+    const { status, json } = chatErrorHttpPayload(err)
+    res.status(status).json(json)
   }
 })
 

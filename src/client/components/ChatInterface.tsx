@@ -9,6 +9,17 @@ export interface Message {
   timestamp: Date
 }
 
+function newMessageId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID()
+    }
+  } catch {
+    /* ignore */
+  }
+  return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+}
+
 const INITIAL_MESSAGES: Message[] = [
   {
     id: '1',
@@ -38,7 +49,7 @@ export function ChatInterface() {
     if (!trimmed || isSending) return
 
     const athleteMessage: Message = {
-      id: crypto.randomUUID(),
+      id: newMessageId(),
       role: 'athlete',
       content: trimmed,
       timestamp: new Date(),
@@ -62,14 +73,29 @@ export function ChatInterface() {
         }),
       })
 
-      const data = await res.json()
+      let data: {
+        response?: string
+        error?: string
+        anthropicMessage?: string
+        requestId?: string
+      }
+      try {
+        data = (await res.json()) as typeof data
+      } catch {
+        throw new Error(
+          `Bad response from server (${res.status}). Check Vercel function logs.`,
+        )
+      }
 
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to get response')
+        const detail =
+          data.anthropicMessage || data.error || 'Failed to get response'
+        const reqId = data.requestId ? ` (request ${data.requestId})` : ''
+        throw new Error(`${detail}${reqId}`)
       }
 
       const aiMessage: Message = {
-        id: crypto.randomUUID(),
+        id: newMessageId(),
         role: 'ai',
         content: data.response,
         timestamp: new Date(),
@@ -77,7 +103,7 @@ export function ChatInterface() {
       setMessages((prev) => [...prev, aiMessage])
     } catch (err) {
       const errorMessage: Message = {
-        id: crypto.randomUUID(),
+        id: newMessageId(),
         role: 'ai',
         content:
           err instanceof Error

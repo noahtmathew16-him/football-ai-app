@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { FOOTBALL_ATHLETE_SYSTEM_PROMPT } from './prompts/system.js'
 
 const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+  apiKey: process.env.ANTHROPIC_API_KEY?.trim(),
 })
 
 export interface ChatMessage {
@@ -36,15 +36,18 @@ export async function chatWithClaude(
 
   const forApi = dropLeadingAssistantTurns(messages).map((m) => ({
     role: m.role,
-    content: m.content,
+    content: typeof m.content === 'string' ? m.content : String(m.content ?? ''),
   }))
 
   if (forApi.length === 0 || forApi[forApi.length - 1].role !== 'user') {
     throw new Error('Invalid conversation: expected a user message to send.')
   }
 
+  const model =
+    process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-4-6'
+
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+    model,
     max_tokens: 1024,
     system,
     messages: forApi,

@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { chatWithClaude, type ChatMessage } from '../src/ai/client'
+import { chatErrorHttpPayload } from '../src/ai/extractAnthropicError'
+import { normalizeAthleteId, normalizeHistory } from '../src/ai/chatRequest'
 
 interface ChatRequestBody {
   message: string
@@ -27,16 +29,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { message, athleteId, history = [] } =
-      parseJsonBody(req) as ChatRequestBody
+    const body = parseJsonBody(req) as ChatRequestBody
+    const message =
+      typeof body.message === 'string' ? body.message.trim() : ''
+    const athleteId = normalizeAthleteId(body.athleteId)
+    const history = normalizeHistory(body.history)
 
-    if (!message || typeof message !== 'string') {
+    if (!message) {
       res.status(400).json({ error: 'Missing or invalid message' })
       return
     }
 
-    if (!athleteId || typeof athleteId !== 'string') {
-      res.status(400).json({ error: 'Missing or invalid athleteId' })
+    if (!athleteId) {
+      res.status(400).json({
+        error: 'Missing or invalid athleteId',
+        hint: 'Send a non-empty string (e.g. "default").',
+      })
       return
     }
 
@@ -47,7 +55,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const messages: ChatMessage[] = [
       ...history.map((m) => ({
-        role: (m.role === 'athlete' ? 'user' : 'assistant') as 'user' | 'assistant',
+        role: (m.role === 'athlete' ? 'user' : 'assistant') as
+          | 'user'
+          | 'assistant',
         content: m.content,
       })),
       { role: 'user', content: message },
@@ -58,9 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     res.json({ response })
   } catch (err) {
-    console.error('Chat API error:', err)
-    res.status(500).json({
-      error: err instanceof Error ? err.message : 'Failed to get AI response',
-    })
+    const { status, json } = chatErrorHttpPayload(err)
+    res.status(status).json(json)
   }
 }
