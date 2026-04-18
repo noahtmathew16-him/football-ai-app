@@ -10,6 +10,44 @@ export function normalizeAthleteId(raw: unknown): string | null {
   return s
 }
 
+export interface NormalizedFilePart {
+  fileName: string
+  mimeType: string
+  base64: string
+}
+
+export function normalizeFiles(raw: unknown): NormalizedFilePart[] {
+  if (!Array.isArray(raw)) return []
+  const out: NormalizedFilePart[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const r = item as Record<string, unknown>
+    const fileName =
+      typeof r.fileName === 'string' ? pathBasenameSafe(r.fileName) : ''
+    const mimeType =
+      typeof r.mimeType === 'string' && r.mimeType.trim().length > 0
+        ? r.mimeType.trim()
+        : 'application/octet-stream'
+    const base64 = typeof r.base64 === 'string' ? r.base64.trim() : ''
+    if (!fileName || !base64) continue
+    out.push({ fileName, mimeType, base64 })
+  }
+  return out
+}
+
+function pathBasenameSafe(p: string): string {
+  const s = p.replace(/\\/g, '/').trim()
+  const parts = s.split('/')
+  return parts[parts.length - 1] ?? s
+}
+
+export function normalizeConversationId(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const s = raw.trim()
+  if (!/^[a-zA-Z0-9_-]{8,128}$/.test(s)) return null
+  return s
+}
+
 export function normalizeHistory(
   raw: unknown,
 ): Array<{ role: 'athlete' | 'ai'; content: string }> {

@@ -1,15 +1,22 @@
 import { Router, Request, Response } from 'express'
-import { chatWithClaude, type ChatMessage } from '../../../lib/client.js'
+import {
+  normalizeAthleteId,
+  normalizeConversationId,
+  normalizeFiles,
+  normalizeHistory,
+} from '../../../lib/chatRequest.js'
+import { processChatRequest } from '../../../lib/processChatRequest.js'
 import { chatErrorHttpPayload } from '../../../lib/extractAnthropicError.js'
-import { normalizeAthleteId, normalizeHistory } from '../../../lib/chatRequest.js'
 import { getAnthropicApiKey } from '../../../lib/env.js'
 
 const router = Router()
 
 interface ChatRequestBody {
-  message: string
-  athleteId: string
+  message?: string
+  athleteId?: string
+  conversationId?: string
   history?: Array<{ role: 'athlete' | 'ai'; content: string }>
+  files?: unknown
 }
 
 router.post('/', async (req: Request, res: Response) => {
@@ -19,9 +26,14 @@ router.post('/', async (req: Request, res: Response) => {
       typeof body.message === 'string' ? body.message.trim() : ''
     const athleteId = normalizeAthleteId(body.athleteId)
     const history = normalizeHistory(body.history)
+    const conversationId = normalizeConversationId(body.conversationId)
+    const files = normalizeFiles(body.files)
 
-    if (!message) {
-      res.status(400).json({ error: 'Missing or invalid message' })
+    if (!message && files.length === 0) {
+      res.status(400).json({
+        error: 'Missing or invalid message',
+        hint: 'Send a message and/or file uploads.',
+      })
       return
     }
 
@@ -42,19 +54,26 @@ router.post('/', async (req: Request, res: Response) => {
       return
     }
 
-    const messages: ChatMessage[] = [
-      ...history.map((m) => ({
-        role: (m.role === 'athlete' ? 'user' : 'assistant') as 'user' | 'assistant',
-        content: m.content,
-      })),
-      { role: 'user', content: message },
-    ]
+    const result = await processChatRequest({
+      message,
+      athleteId,
+      conversationId: conversationId ?? undefined,
+      history,
+      files,
+    })
 
-    const athleteContext = `athleteId: ${athleteId}`
-    const response = await chatWithClaude(messages, athleteContext)
-
-    res.json({ response })
+    res.json({
+      response: result.response,
+      conversationId: result.conversationId,
+      userMessageId: result.userMessageId,
+      assistantMessageId: result.assistantMessageId,
+    })
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg.includes('too large') || msg.includes('Missing message')) {
+      res.status(400).json({ error: msg })
+      return
+    }
     const { status, json } = chatErrorHttpPayload(err)
     res.status(status).json(json)
   }

@@ -1,4 +1,12 @@
-import { useState, useRef, useEffect } from 'react'
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  type KeyboardEvent,
+} from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 export type MessageRole = 'athlete' | 'ai'
 
@@ -7,6 +15,8 @@ export interface Message {
   role: MessageRole
   content: string
   timestamp: Date
+  attachmentNames?: string[]
+  feedbackSubmitted?: boolean
 }
 
 function newMessageId(): string {
@@ -22,7 +32,7 @@ function newMessageId(): string {
 
 const INITIAL_MESSAGES: Message[] = [
   {
-    id: '1',
+    id: 'welcome',
     role: 'ai',
     content:
       "Hey. I'm here to help with football, school, and staying organized. What's on your mind?",
@@ -30,37 +40,160 @@ const INITIAL_MESSAGES: Message[] = [
   },
 ]
 
+const ACCEPT_FILES =
+  'image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/markdown,.pdf,.txt,.md'
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => {
+      const s = r.result as string
+      const i = s.indexOf(',')
+      resolve(i >= 0 ? s.slice(i + 1) : s)
+    }
+    r.onerror = () => reject(r.error)
+    r.readAsDataURL(file)
+  })
+}
+
+function TypingIndicator() {
+  return (
+    <div className="flex justify-start px-1 py-2">
+      <div className="rounded-2xl rounded-bl-md border border-neutral-200 bg-white px-4 py-3 shadow-sm">
+        <div className="flex gap-1.5 items-center">
+          <span className="sr-only">Assistant is typing</span>
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              className="w-2 h-2 rounded-full bg-neutral-400 animate-bounce"
+              style={{ animationDelay: `${i * 0.15}s` }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MarkdownBody({ content }: { content: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      className="text-[15px] leading-relaxed text-neutral-800 [&_a]:text-emerald-700 [&_a]:underline [&_code]:text-sm [&_code]:bg-neutral-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_pre]:bg-neutral-900 [&_pre]:text-neutral-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-4 [&_blockquote]:border-neutral-300 [&_blockquote]:pl-3 [&_blockquote]:text-neutral-600"
+      components={{
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer">
+            {children}
+          </a>
+        ),
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  )
+}
+
 export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES)
   const [input, setInput] = useState('')
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [conversationId, setConversationId] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
+  const [copyFlashId, setCopyFlashId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  }, [])
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages])
+  }, [messages, isSending, scrollToBottom])
+
+  const submitFeedback = async (messageId: string, rating: number) => {
+    if (!conversationId) return
+    const res = await fetch('/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversationId, messageId, rating }),
+    })
+    if (!res.ok) return
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId ? { ...m, feedbackSubmitted: true } : m,
+      ),
+    )
+  }
+
+  const copyToClipboard = async (id: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopyFlashId(id)
+      setTimeout(() => setCopyFlashId(null), 2000)
+    } catch {
+      /* ignore */
+    }
+  }
 
   const handleSend = async () => {
     const trimmed = input.trim()
-    if (!trimmed || isSending) return
+    if ((!trimmed && pendingFiles.length === 0) || isSending) return
+
+    const tempUserId = newMessageId()
+    const names = pendingFiles.map((f) => f.name)
+    const displayLines = [trimmed, names.length ? `[Files: ${names.join(', ')}]` : '']
+      .filter(Boolean)
+      .join('\n\n')
 
     const athleteMessage: Message = {
-      id: newMessageId(),
+      id: tempUserId,
       role: 'athlete',
-      content: trimmed,
+      content: displayLines,
       timestamp: new Date(),
+      attachmentNames: names.length ? names : undefined,
     }
     setMessages((prev) => [...prev, athleteMessage])
     setInput('')
+    setPendingFiles([])
     setIsSending(true)
 
     const history = messages
       .filter((m) => m.role === 'athlete' || m.role === 'ai')
       .map((m) => ({ role: m.role, content: m.content }))
+
+    let filesPayload: Array<{ fileName: string; mimeType: string; base64: string }> =
+      []
+    try {
+      const parts = await Promise.all(
+        pendingFiles.map(async (f) => ({
+          fileName: f.name,
+          mimeType: f.type || 'application/octet-stream',
+          base64: await readFileAsBase64(f),
+        })),
+      )
+      let total = 0
+      for (const p of parts) {
+        total += Math.ceil((p.base64.length * 3) / 4)
+        if (total > 8 * 1024 * 1024) {
+          throw new Error('Attachments are too large (max 8MB total).')
+        }
+      }
+      filesPayload = parts
+    } catch (e) {
+      setIsSending(false)
+      const err: Message = {
+        id: newMessageId(),
+        role: 'ai',
+        content:
+          e instanceof Error
+            ? `Something went wrong: ${e.message}`
+            : 'Something went wrong with file uploads.',
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, err])
+      return
+    }
 
     try {
       const res = await fetch('/api/chat', {
@@ -69,7 +202,9 @@ export function ChatInterface() {
         body: JSON.stringify({
           message: trimmed,
           athleteId: 'default',
+          conversationId: conversationId ?? undefined,
           history,
+          files: filesPayload.length ? filesPayload : undefined,
         }),
       })
 
@@ -79,6 +214,9 @@ export function ChatInterface() {
         hint?: string
         anthropicMessage?: string
         requestId?: string
+        conversationId?: string
+        userMessageId?: string
+        assistantMessageId?: string
       }
       try {
         data = (await res.json()) as typeof data
@@ -98,13 +236,25 @@ export function ChatInterface() {
         throw new Error(`${detail}${reqId}`)
       }
 
-      const aiMessage: Message = {
-        id: newMessageId(),
-        role: 'ai',
-        content: data.response,
-        timestamp: new Date(),
-      }
-      setMessages((prev) => [...prev, aiMessage])
+      const cid = data.conversationId ?? null
+      const userId = data.userMessageId
+      const assistantId = data.assistantMessageId
+      if (cid) setConversationId(cid)
+
+      setMessages((prev) => {
+        const mapped = prev.map((m) =>
+          m.id === tempUserId && userId
+            ? { ...m, id: userId }
+            : m,
+        )
+        const aiMessage: Message = {
+          id: assistantId ?? newMessageId(),
+          role: 'ai',
+          content: data.response ?? '',
+          timestamp: new Date(),
+        }
+        return [...mapped, aiMessage]
+      })
     } catch (err) {
       const errorMessage: Message = {
         id: newMessageId(),
@@ -121,71 +271,176 @@ export function ChatInterface() {
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      handleSend()
+      void handleSend()
     }
   }
 
+  const onPickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const list = e.target.files
+    if (!list?.length) return
+    setPendingFiles((prev) => [...prev, ...Array.from(list)])
+    e.target.value = ''
+  }
+
+  const showFeedback = (msg: Message) =>
+    msg.role === 'ai' &&
+    msg.id !== 'welcome' &&
+    conversationId &&
+    !msg.content.startsWith('Something went wrong:') &&
+    !msg.feedbackSubmitted
+
   return (
-    <div className="flex flex-col h-[100dvh] max-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="flex-shrink-0 px-4 py-3 bg-white border-b border-slate-200">
-        <h1 className="text-lg font-semibold text-slate-800">
-          Football Athlete AI
-        </h1>
-        <p className="text-sm text-slate-500">
-          Performance • Academics • Life
-        </p>
+    <div className="flex flex-col h-[100dvh] max-h-screen bg-[#f4f4f5]">
+      <header className="flex-shrink-0 border-b border-neutral-200/80 bg-white/90 backdrop-blur-sm">
+        <div className="max-w-3xl mx-auto px-4 py-3">
+          <h1 className="text-base font-semibold text-neutral-900 tracking-tight">
+            Football Athlete AI
+          </h1>
+          <p className="text-xs text-neutral-500 mt-0.5">
+            Performance · Academics · Life
+          </p>
+        </div>
       </header>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4">
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex ${msg.role === 'athlete' ? 'justify-end' : 'justify-start'}`}
-          >
+      <div className="flex-1 overflow-y-auto overscroll-contain">
+        <div className="max-w-3xl mx-auto px-3 sm:px-4 py-6 space-y-5">
+          {messages.map((msg) => (
             <div
-              className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-2.5 ${
-                msg.role === 'athlete'
-                  ? 'bg-emerald-600 text-white rounded-br-md'
-                  : 'bg-white text-slate-800 border border-slate-200 rounded-bl-md shadow-sm'
-              }`}
+              key={msg.id}
+              className={`flex gap-3 ${msg.role === 'athlete' ? 'justify-end' : 'justify-start'}`}
             >
-              <p className="text-sm sm:text-base whitespace-pre-wrap break-words">
-                {msg.content}
-              </p>
+              {msg.role === 'ai' && (
+                <div
+                  className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-600 text-white text-xs font-semibold flex items-center justify-center mt-0.5"
+                  aria-hidden
+                >
+                  AI
+                </div>
+              )}
+              <div
+                className={`min-w-0 max-w-[min(100%,32rem)] ${
+                  msg.role === 'athlete' ? 'order-1' : ''
+                }`}
+              >
+                <div
+                  className={`rounded-2xl px-4 py-3 shadow-sm ${
+                    msg.role === 'athlete'
+                      ? 'bg-emerald-600 text-white rounded-br-md'
+                      : 'bg-white text-neutral-900 border border-neutral-200/90 rounded-bl-md'
+                  }`}
+                >
+                  {msg.role === 'athlete' ? (
+                    <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+                      {msg.content}
+                    </div>
+                  ) : (
+                    <MarkdownBody content={msg.content} />
+                  )}
+                </div>
+                {msg.role === 'ai' && (
+                  <div className="flex flex-wrap items-center gap-2 mt-2 pl-0.5">
+                    <button
+                      type="button"
+                      onClick={() => void copyToClipboard(msg.id, msg.content)}
+                      className="text-xs text-neutral-500 hover:text-neutral-800 px-2 py-1 rounded-md hover:bg-neutral-200/80 transition-colors"
+                    >
+                      {copyFlashId === msg.id ? 'Copied' : 'Copy'}
+                    </button>
+                    {showFeedback(msg) && (
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-neutral-600">
+                        <span className="text-neutral-400">Helpful?</span>
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                          <button
+                            key={n}
+                            type="button"
+                            className="min-w-[1.75rem] px-1.5 py-0.5 rounded-md border border-neutral-200 bg-white hover:bg-emerald-50 hover:border-emerald-300 transition-colors"
+                            onClick={() => void submitFeedback(msg.id, n)}
+                          >
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {msg.feedbackSubmitted && (
+                      <span className="text-xs text-emerald-600">Thanks for the feedback.</span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-        <div ref={scrollRef} />
+          ))}
+          {isSending && <TypingIndicator />}
+          <div ref={scrollRef} />
+        </div>
       </div>
 
-      {/* Input */}
-      <div className="flex-shrink-0 p-4 bg-white border-t border-slate-200">
-        <div className="flex gap-2 max-w-3xl mx-auto">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask about training, school, or staying on top of things..."
-            disabled={isSending}
-            className="flex-1 min-w-0 px-4 py-3 rounded-xl border border-slate-300 bg-slate-50 text-slate-800 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed text-base"
-          />
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || isSending}
-            className="flex-shrink-0 px-5 py-3 rounded-xl bg-emerald-600 text-white font-medium hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-emerald-600 transition-colors"
-          >
-            {isSending ? (
-              <span className="inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              'Send'
-            )}
-          </button>
+      <div className="flex-shrink-0 border-t border-neutral-200 bg-white">
+        <div className="max-w-3xl mx-auto p-3 sm:p-4">
+          {pendingFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {pendingFiles.map((f) => (
+                <span
+                  key={`${f.name}-${f.size}`}
+                  className="inline-flex items-center gap-1 text-xs bg-neutral-100 text-neutral-700 px-2 py-1 rounded-lg border border-neutral-200"
+                >
+                  {f.name}
+                  <button
+                    type="button"
+                    className="text-neutral-500 hover:text-red-600"
+                    onClick={() =>
+                      setPendingFiles((prev) => prev.filter((x) => x !== f))
+                    }
+                    aria-label={`Remove ${f.name}`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2 items-end">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={ACCEPT_FILES}
+              className="hidden"
+              onChange={onPickFiles}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isSending}
+              className="flex-shrink-0 w-11 h-11 rounded-xl border border-neutral-300 bg-neutral-50 text-neutral-600 hover:bg-neutral-100 disabled:opacity-50"
+              title="Attach files"
+              aria-label="Attach files"
+            >
+              <span className="text-lg leading-none">+</span>
+            </button>
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Message… (Shift+Enter for new line)"
+              disabled={isSending}
+              rows={1}
+              className="flex-1 min-w-0 min-h-[44px] max-h-40 px-4 py-3 rounded-xl border border-neutral-300 bg-white text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 disabled:opacity-60 resize-y text-[15px]"
+            />
+            <button
+              onClick={() => void handleSend()}
+              disabled={(!input.trim() && pendingFiles.length === 0) || isSending}
+              className="flex-shrink-0 min-w-[5rem] h-11 px-4 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSending ? (
+                <span className="inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
+              ) : (
+                'Send'
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>
