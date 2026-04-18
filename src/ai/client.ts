@@ -52,12 +52,30 @@ export async function chatWithClaude(
 
   const model = getAnthropicModel()
 
+  console.error(
+    '[chatWithClaude] calling messages.create',
+    JSON.stringify({
+      model,
+      turns: forApi.length,
+      systemChars: system.length,
+      lastRole: forApi[forApi.length - 1]?.role,
+    }),
+  )
+
   const response = await createClient().messages.create({
     model,
     max_tokens: 1024,
     system,
     messages: forApi,
   })
+
+  console.error(
+    '[chatWithClaude] messages.create ok',
+    JSON.stringify({
+      stopReason: response.stop_reason,
+      contentBlocks: response.content?.length ?? 0,
+    }),
+  )
 
   const textBlock = response.content.find((b) => b.type === 'text')
   if (!textBlock || textBlock.type !== 'text') {
